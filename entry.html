@@ -118,14 +118,12 @@
   </div>
 
   <script>
-    // 👉 COLE AQUI a NOVA URL do Web App (a que gera script.googleusercontent.com/.../exec)
     const API_URL = 'https://script.googleusercontent.com/macros/echo?user_content_key=AehSKLj5SqZ9omGqeKlT5zoP-BY1IAE_aEacVJV_6aalPCYRrW4jrCU0OAHYHQPxRwdg4zD3oVFJ7rPB-6ZtkUBIH_76GRiYouW3EGZfTaHdzRiz4UhZ90dngmCHfjnXZRRTH_UT3rqTKY8cSS-NR_7-ej4rJZ8a7twcwLG7ieNrvLXbv1ZAROUXfTpb9eKJ9cRPziFDjgeJALL8xdx9ESxaGpdQhwuIcjWJC3flLU2yBv2KPTdRW92nlHuIFt2pFVugJ1tEQj2tpV71HOzcWNsww160G8zvIjANzikDGW3pIy2BuoXf5vEveq2boLe1ew&lib=MPXggGxPB1fO_TOEviAtAK0k4hpu5vGQB';
 
     let configSlots = [];
-    let stopReasons = []; // array de strings
+    let stopReasons = [];
     let todayStr = '';
 
-    // Mapa em memória: data[SlotId][line] = { produced, reason }
     let currentData = {};
 
     function formatDateYYYYMMDD(d) {
@@ -159,7 +157,6 @@
         document.getElementById('dateInfo').textContent =
           `Working date: ${formatDateHuman(today)} (auto)`;
 
-        // 1) Config
         const cfgResp = await fetch(`${API_URL}&action=getConfig`);
         if (!cfgResp.ok) throw new Error('Error loading config');
         const cfg = await cfgResp.json();
@@ -167,12 +164,10 @@
         configSlots = cfg.slots || [];
         stopReasons = cfg.reasons || [];
 
-        // 2) Dados do dia
         const dataResp = await fetch(`${API_URL}&action=getData`);
         if (!dataResp.ok) throw new Error('Error loading data');
         const rows = await dataResp.json();
 
-        // monta currentData
         currentData = {};
         rows.forEach(r => {
           const slotId = String(r.slotId);
@@ -200,7 +195,6 @@
       const tbody = document.getElementById('bodyTable');
       tbody.innerHTML = '';
 
-      // ordenar slots por shift e horário
       const sorted = [...configSlots].sort((a, b) => {
         if (a.Shift === b.Shift) {
           return String(a.Label).localeCompare(String(b.Label));
@@ -227,7 +221,6 @@
           const lineKey = String(line);
           const cellData = currentData[slot.SlotId] && currentData[slot.SlotId][lineKey];
 
-          // Produced
           const tdProd = document.createElement('td');
           const inp = document.createElement('input');
           inp.type = 'number';
@@ -240,7 +233,6 @@
           tdProd.appendChild(inp);
           tr.appendChild(tdProd);
 
-          // Reason (dropdown simples + texto opcional)
           const tdReason = document.createElement('td');
 
           const sel = document.createElement('select');
@@ -258,7 +250,6 @@
           });
 
           if (cellData && cellData.reason) {
-            // tenta selecionar o código exato, se não existir fica como texto livre
             if (stopReasons.includes(cellData.reason)) {
               sel.value = cellData.reason;
             }
@@ -271,7 +262,7 @@
           txt.placeholder = 'Note (optional)';
           txt.className = 'reason-text';
           txt.id = `reasonTxt_${slot.SlotId}_${lineKey}`;
-          // se não for um dos códigos, usamos o texto livre
+
           if (cellData && cellData.reason && !stopReasons.includes(cellData.reason)) {
             txt.value = cellData.reason;
           }
@@ -288,7 +279,6 @@
       });
     }
 
-    // Quando muda alguma célula -> salva essa linha
     async function onCellChange(slotId, lineKey) {
       try {
         const prodInput = document.getElementById(`prod_${slotId}_${lineKey}`);
@@ -327,9 +317,7 @@
       }
     }
 
-    // start
     loadAll();
   </script>
 </body>
 </html>
-
