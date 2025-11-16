@@ -163,14 +163,14 @@
         document.getElementById('dateInfo').textContent =
           `Working date: ${formatDateHuman(today)} (auto)`;
 
-        const cfgResp = await fetch(`${API_URL}&action=getConfig`);
+        const cfgResp = await fetch(buildUrl({ action: 'getConfig' }));
         if (!cfgResp.ok) throw new Error('Error loading config');
         const cfg = await cfgResp.json();
 
         configSlots = cfg.slots || [];
         stopReasons = cfg.reasons || [];
 
-        const dataResp = await fetch(`${API_URL}&action=getData`);
+        const dataResp = await fetch(buildUrl({ action: 'getData' }));
         if (!dataResp.ok) throw new Error('Error loading data');
         
         // A resposta pode ser um array direto ou um objeto {rows: [...]} ou {data: [...]}
@@ -294,8 +294,8 @@
 async function onCellChange(slotId, lineKey) {
   try {
     const prodInput = document.getElementById(`prod_${slotId}_${lineKey}`);
-    const sel = document.getElementById(`reason_${slotId}_${lineKey}`);
-    const txt = document.getElementById(`reasonTxt_${slotId}_${lineKey}`);
+    const sel       = document.getElementById(`reason_${slotId}_${lineKey}`);
+    const txt       = document.getElementById(`reasonTxt_${slotId}_${lineKey}`);
 
     const produced = prodInput.value === '' ? 0 : Number(prodInput.value);
     let reason = sel.value || '';
@@ -305,19 +305,16 @@ async function onCellChange(slotId, lineKey) {
 
     setStatus('Saving…', 'warn');
 
-    // Monta os parâmetros da chamada
-    const qs = new URLSearchParams({
-      action: 'saveEntry',
-      date: todayStr,
-      slotId: slotId,
-      line: lineKey,
+    // Usa a função buildUrl para montar a URL corretamente
+    const url = buildUrl({
+      action:  'saveEntry',
+      date:    todayStr,
+      slotId:  slotId,
+      line:    lineKey,
       produced: String(produced),
-      reason: reason
+      reason:  reason
     });
 
-    // IMPORTANTE: API_URL já tem "?" e vários parâmetros.
-    // Por isso sempre concatenamos com "&" + querystring.
-    const url = `${API_URL}&${qs.toString()}`;
     console.log('Saving to URL:', url);
 
     const resp = await fetch(url);
@@ -336,7 +333,6 @@ async function onCellChange(slotId, lineKey) {
     console.log('Save response JSON:', json);
 
     if (!json.success) {
-      // Se o Apps Script mandar { success:false, error:"..." }
       throw new Error(json.error || 'Unknown save error');
     }
 
@@ -351,6 +347,7 @@ async function onCellChange(slotId, lineKey) {
   </script>
 </body>
 </html>
+
 
 
 
