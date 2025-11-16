@@ -166,10 +166,16 @@
 
         const dataResp = await fetch(`${API_URL}&action=getData`);
         if (!dataResp.ok) throw new Error('Error loading data');
-        const rows = await dataResp.json();
-
+        
+        // A resposta pode ser um array direto ou um objeto {rows: [...]} ou {data: [...]}
+        const dataJson = await dataResp.json();
+        const rows = Array.isArray(dataJson)
+          ? dataJson
+          : (dataJson.rows || dataJson.data || []);
+        
+        // monta currentData
         currentData = {};
-        rows.forEach(r => {
+        (rows || []).forEach(r => {
           const slotId = String(r.slotId);
           const line = String(r.line);
           if (!currentData[slotId]) currentData[slotId] = {};
@@ -321,3 +327,4 @@
   </script>
 </body>
 </html>
+
