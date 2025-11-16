@@ -285,46 +285,65 @@
       });
     }
 
-    async function onCellChange(slotId, lineKey) {
-      try {
-        const prodInput = document.getElementById(`prod_${slotId}_${lineKey}`);
-        const sel = document.getElementById(`reason_${slotId}_${lineKey}`);
-        const txt = document.getElementById(`reasonTxt_${slotId}_${lineKey}`);
+async function onCellChange(slotId, lineKey) {
+  try {
+    const prodInput = document.getElementById(`prod_${slotId}_${lineKey}`);
+    const sel = document.getElementById(`reason_${slotId}_${lineKey}`);
+    const txt = document.getElementById(`reasonTxt_${slotId}_${lineKey}`);
 
-        const produced = prodInput.value === '' ? 0 : Number(prodInput.value);
-        let reason = sel.value || '';
-        if (!reason && txt.value) {
-          reason = txt.value;
-        }
-
-        setStatus('Saving…', 'warn');
-
-        const params = new URLSearchParams({
-          action: 'saveEntry',
-          date: todayStr,
-          slotId: slotId,
-          line: lineKey,
-          produced: String(produced),
-          reason: reason
-        });
-
-        const resp = await fetch(`${API_URL}&${params.toString()}`);
-        if (!resp.ok) throw new Error('Save error');
-
-        const json = await resp.json();
-        if (!json.success) {
-          throw new Error(json.error || 'Unknown save error');
-        }
-
-        setStatus('Auto-save OK', 'ok');
-      } catch (err) {
-        console.error(err);
-        setStatus('Error during auto-save.', 'error');
-      }
+    const produced = prodInput.value === '' ? 0 : Number(prodInput.value);
+    let reason = sel.value || '';
+    if (!reason && txt.value.trim() !== '') {
+      reason = txt.value.trim();
     }
+
+    setStatus('Saving…', 'warn');
+
+    // Monta os parâmetros da chamada
+    const qs = new URLSearchParams({
+      action: 'saveEntry',
+      date: todayStr,
+      slotId: slotId,
+      line: lineKey,
+      produced: String(produced),
+      reason: reason
+    });
+
+    // IMPORTANTE: API_URL já tem "?" e vários parâmetros.
+    // Por isso sempre concatenamos com "&" + querystring.
+    const url = `${API_URL}&${qs.toString()}`;
+    console.log('Saving to URL:', url);
+
+    const resp = await fetch(url);
+
+    if (!resp.ok) {
+      const text = await resp.text().catch(() => '');
+      console.error('HTTP error on save:', resp.status, text);
+      throw new Error('Save error');
+    }
+
+    const json = await resp.json().catch(err => {
+      console.error('Error parsing JSON:', err);
+      throw new Error('Invalid JSON from server');
+    });
+
+    console.log('Save response JSON:', json);
+
+    if (!json.success) {
+      // Se o Apps Script mandar { success:false, error:"..." }
+      throw new Error(json.error || 'Unknown save error');
+    }
+
+    setStatus('Auto-save OK', 'ok');
+  } catch (err) {
+    console.error('Auto-save error:', err);
+    setStatus('Error during auto-save.', 'error');
+  }
+}
 
     loadAll();
   </script>
 </body>
 </html>
+
 
