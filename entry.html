@@ -1,0 +1,334 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Production Entry – CLM6</title>
+  <style>
+    body {
+      font-family: Arial, Helvetica, sans-serif;
+      background: #111;
+      color: #fff;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+
+    .date-info {
+      text-align: center;
+      margin-bottom: 15px;
+      font-size: 14px;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      color: #000;
+      font-size: 13px;
+    }
+
+    th, td {
+      border: 1px solid #ccc;
+      padding: 6px;
+      text-align: center;
+    }
+
+    th {
+      background: #e0e0e0;
+    }
+
+    input[type="number"] {
+      width: 70px;
+      padding: 3px;
+      font-size: 13px;
+      text-align: center;
+    }
+
+    select {
+      width: 110px;
+      padding: 3px;
+      font-size: 12px;
+    }
+
+    .reason-text {
+      width: 110px;
+      padding: 3px;
+      font-size: 12px;
+      margin-top: 2px;
+    }
+
+    .status-bar {
+      margin-top: 10px;
+      font-size: 13px;
+    }
+
+    .status-ok {
+      color: #00ff90;
+    }
+
+    .status-warn {
+      color: #ffcc00;
+    }
+
+    .status-error {
+      color: #ff8080;
+    }
+
+    .loading {
+      text-align: center;
+      margin-top: 30px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+
+<body>
+  <h1>Production Entry – CLM6</h1>
+  <div class="date-info" id="dateInfo"></div>
+
+  <div id="loading" class="loading">Loading configuration…</div>
+
+  <div id="tableContainer" style="display:none;">
+    <table>
+      <thead>
+        <tr>
+          <th rowspan="2">Shift</th>
+          <th rowspan="2">Time slot</th>
+          <th rowspan="2">Target</th>
+          <th colspan="2">Line 1</th>
+          <th colspan="2">Line 2</th>
+          <th colspan="2">Line 3</th>
+          <th colspan="2">Line 4</th>
+        </tr>
+        <tr>
+          <th>Produced</th><th>Reason</th>
+          <th>Produced</th><th>Reason</th>
+          <th>Produced</th><th>Reason</th>
+          <th>Produced</th><th>Reason</th>
+        </tr>
+      </thead>
+      <tbody id="bodyTable"></tbody>
+    </table>
+
+    <div class="status-bar" id="statusMsg"></div>
+  </div>
+
+  <script>
+    // 👉 COLE AQUI a NOVA URL do Web App (a que gera script.googleusercontent.com/.../exec)
+    const API_URL = 'https://script.google.com/macros/s/AKfycbwawMStMc5CU-ln7A-zwzmNVdnA0quqaRHKYuriDrkR1WDl9M2rcmajw2l_pus1M3Sf/exec';
+
+    let configSlots = [];
+    let stopReasons = []; // array de strings
+    let todayStr = '';
+
+    // Mapa em memória: data[SlotId][line] = { produced, reason }
+    let currentData = {};
+
+    function formatDateYYYYMMDD(d) {
+      const y = d.getFullYear();
+      const m = String(d.getMonth() + 1).padStart(2, '0');
+      const day = String(d.getDate()).padStart(2, '0');
+      return `${y}-${m}-${day}`;
+    }
+
+    function formatDateHuman(d) {
+      const day = String(d.getDate()).padStart(2, '0');
+      const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+      const m = months[d.getMonth()];
+      const y = d.getFullYear();
+      return `${day} ${m} ${y}`;
+    }
+
+    function setStatus(msg, level = 'ok') {
+      const el = document.getElementById('statusMsg');
+      el.textContent = msg || '';
+      el.className = 'status-bar';
+      if (level === 'ok') el.classList.add('status-ok');
+      if (level === 'warn') el.classList.add('status-warn');
+      if (level === 'error') el.classList.add('status-error');
+    }
+
+    async function loadAll() {
+      try {
+        const today = new Date();
+        todayStr = formatDateYYYYMMDD(today);
+        document.getElementById('dateInfo').textContent =
+          `Working date: ${formatDateHuman(today)} (auto)`;
+
+        // 1) Config
+        const cfgResp = await fetch(`${API_URL}?action=getConfig`);
+        if (!cfgResp.ok) throw new Error('Error loading config');
+        const cfg = await cfgResp.json();
+
+        configSlots = cfg.slots || [];
+        stopReasons = cfg.reasons || [];
+
+        // 2) Dados do dia
+        const dataResp = await fetch(`${API_URL}?action=getData`);
+        if (!dataResp.ok) throw new Error('Error loading data');
+        const rows = await dataResp.json();
+
+        // monta currentData
+        currentData = {};
+        rows.forEach(r => {
+          const slotId = String(r.slotId);
+          const line = String(r.line);
+          if (!currentData[slotId]) currentData[slotId] = {};
+          currentData[slotId][line] = {
+            produced: r.produced || 0,
+            reason: r.reason || ''
+          };
+        });
+
+        buildTable();
+
+        document.getElementById('loading').style.display = 'none';
+        document.getElementById('tableContainer').style.display = 'block';
+        setStatus('Loaded. Changes are saved automatically.', 'ok');
+      } catch (err) {
+        console.error(err);
+        document.getElementById('loading').textContent =
+          'Error loading data. Open console for details.';
+      }
+    }
+
+    function buildTable() {
+      const tbody = document.getElementById('bodyTable');
+      tbody.innerHTML = '';
+
+      // ordenar slots por shift e horário
+      const sorted = [...configSlots].sort((a, b) => {
+        if (a.Shift === b.Shift) {
+          return String(a.Label).localeCompare(String(b.Label));
+        }
+        return Number(a.Shift) - Number(b.Shift);
+      });
+
+      sorted.forEach(slot => {
+        const tr = document.createElement('tr');
+
+        const tdShift = document.createElement('td');
+        tdShift.textContent = `Shift ${slot.Shift}`;
+        tr.appendChild(tdShift);
+
+        const tdLabel = document.createElement('td');
+        tdLabel.textContent = slot.Label || '';
+        tr.appendChild(tdLabel);
+
+        const tdTarget = document.createElement('td');
+        tdTarget.textContent = slot.Target;
+        tr.appendChild(tdTarget);
+
+        for (let line = 1; line <= 4; line++) {
+          const lineKey = String(line);
+          const cellData = currentData[slot.SlotId] && currentData[slot.SlotId][lineKey];
+
+          // Produced
+          const tdProd = document.createElement('td');
+          const inp = document.createElement('input');
+          inp.type = 'number';
+          inp.min = '0';
+          inp.id = `prod_${slot.SlotId}_${lineKey}`;
+          if (cellData && cellData.produced !== undefined) {
+            inp.value = cellData.produced;
+          }
+          inp.addEventListener('change', () => onCellChange(slot.SlotId, lineKey));
+          tdProd.appendChild(inp);
+          tr.appendChild(tdProd);
+
+          // Reason (dropdown simples + texto opcional)
+          const tdReason = document.createElement('td');
+
+          const sel = document.createElement('select');
+          sel.id = `reason_${slot.SlotId}_${lineKey}`;
+          const optEmpty = document.createElement('option');
+          optEmpty.value = '';
+          optEmpty.textContent = '';
+          sel.appendChild(optEmpty);
+
+          stopReasons.forEach(code => {
+            const opt = document.createElement('option');
+            opt.value = code;
+            opt.textContent = code;
+            sel.appendChild(opt);
+          });
+
+          if (cellData && cellData.reason) {
+            // tenta selecionar o código exato, se não existir fica como texto livre
+            if (stopReasons.includes(cellData.reason)) {
+              sel.value = cellData.reason;
+            }
+          }
+
+          sel.addEventListener('change', () => onCellChange(slot.SlotId, lineKey));
+
+          const txt = document.createElement('input');
+          txt.type = 'text';
+          txt.placeholder = 'Note (optional)';
+          txt.className = 'reason-text';
+          txt.id = `reasonTxt_${slot.SlotId}_${lineKey}`;
+          // se não for um dos códigos, usamos o texto livre
+          if (cellData && cellData.reason && !stopReasons.includes(cellData.reason)) {
+            txt.value = cellData.reason;
+          }
+
+          txt.addEventListener('change', () => onCellChange(slot.SlotId, lineKey));
+
+          tdReason.appendChild(sel);
+          tdReason.appendChild(document.createElement('br'));
+          tdReason.appendChild(txt);
+          tr.appendChild(tdReason);
+        }
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    // Quando muda alguma célula -> salva essa linha
+    async function onCellChange(slotId, lineKey) {
+      try {
+        const prodInput = document.getElementById(`prod_${slotId}_${lineKey}`);
+        const sel = document.getElementById(`reason_${slotId}_${lineKey}`);
+        const txt = document.getElementById(`reasonTxt_${slotId}_${lineKey}`);
+
+        const produced = prodInput.value === '' ? 0 : Number(prodInput.value);
+        let reason = sel.value || '';
+        if (!reason && txt.value) {
+          reason = txt.value;
+        }
+
+        setStatus('Saving…', 'warn');
+
+        const params = new URLSearchParams({
+          action: 'saveEntry',
+          date: todayStr,
+          slotId: slotId,
+          line: lineKey,
+          produced: String(produced),
+          reason: reason
+        });
+
+        const resp = await fetch(`${API_URL}?${params.toString()}`);
+        if (!resp.ok) throw new Error('Save error');
+
+        const json = await resp.json();
+        if (!json.success) {
+          throw new Error(json.error || 'Unknown save error');
+        }
+
+        setStatus('Auto-save OK', 'ok');
+      } catch (err) {
+        console.error(err);
+        setStatus('Error during auto-save.', 'error');
+      }
+    }
+
+    // start
+    loadAll();
+  </script>
+</body>
+</html>
