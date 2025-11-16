@@ -120,6 +120,12 @@
   <script>
     const API_URL = 'https://script.google.com/macros/s/AKfycbw1-j-b1e5jFtaWhEip7CUNQC9tyVmB0hgZbsigwBg1WbjFOznldKaNoQO6E4xbMwDs1A/exec';
 
+    function buildUrl(params) {
+      const qs = new URLSearchParams(params).toString();
+      const sep = API_URL.includes('?') ? '&' : '?';
+      return `${API_URL}${sep}${qs}`;
+    }
+
     let configSlots = [];
     let stopReasons = [];
     let todayStr = '';
@@ -345,6 +351,7 @@ async function onCellChange(slotId, lineKey) {
   </script>
 </body>
 </html>
+
 
 
 
